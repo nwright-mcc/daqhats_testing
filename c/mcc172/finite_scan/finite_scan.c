@@ -9,20 +9,17 @@
 const char* default_filename = "./test.csv";
 
 
-int read_args(int argc, char **argv, uint8_t* address, int* channel, 
+int read_args(int argc, char **argv, uint8_t* address, 
     double* sample_rate_per_channel, uint32_t* samples, char* filename) 
 {
 	int c;
 
 	opterr = 0;
 
-	while ((c = getopt(argc, argv, "ha:c:f:n:o:")) != -1) {
+	while ((c = getopt(argc, argv, "ha:f:n:o:")) != -1) {
 		switch (c) {
 			case 'a':
 				*address = atoi(optarg);
-				break;
-			case 'c':
-				*channel = atoi(optarg);
 				break;
             case 'f':
                 *sample_rate_per_channel = atof(optarg);
@@ -37,7 +34,7 @@ int read_args(int argc, char **argv, uint8_t* address, int* channel,
                 strcpy(filename, optarg);
                 break;
 			case '?':
-				if ((optopt == 'c') || (optopt == 'a') || (optopt == 'f') ||
+				if ((optopt == 'a') || (optopt == 'f') ||
                     (optopt == 'n') || (optopt == 'o'))
 					fprintf (stderr, "Option -%c requires an argument.\n", optopt);
 				else if (isprint (optopt))
@@ -66,7 +63,6 @@ int main(int argc, char* argv[])
     double sample_rate_per_channel;
     FILE* logfile;
     int index;
-    int channel;
     int result;
     uint8_t clock_source;
     char filename[256];
@@ -75,16 +71,14 @@ int main(int argc, char* argv[])
     sample_rate_per_channel = 51200.0;
     samples_per_channel = 51200;
     address = 0;
-    channel = 0;
     strcpy(filename, default_filename);
     
-	if (read_args(argc, argv, &address, &channel, &sample_rate_per_channel,
+	if (read_args(argc, argv, &address, &sample_rate_per_channel,
         &samples_per_channel, filename) != 0) 
     {
 		fprintf(stderr, 
-			"Usage: %s [-a address] [-c channel] [-f frequency] [-n samples] [-o file]\n"
+			"Usage: %s [-a address] [-f frequency] [-n samples] [-o file]\n"
 			"    -a address: address [0-7] of the HAT to scan (default is 0)\n"
-			"    -c channel: channel number to scan (default is 0)\n"
             "    -f frequency: ADC sampling frequency (default is 51200)\n"
             "    -n samples: number of samples (default is 51200)\n"
             "    -o file: output file name (default is ./test.csv)\n",
@@ -92,8 +86,8 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
-    channels = 1 << channel;
-    num_channels = 1;
+    channels = 0x03;
+    num_channels = 2;
     options = 0;
 
     result = mcc172_open(address);
@@ -149,7 +143,7 @@ int main(int argc, char* argv[])
     printf("ADC clock set to %.1f Hz\n", sample_rate_per_channel);
 #endif
     
-    printf("Scanning %d samples from channel %d...\n", samples_per_channel, channel);
+    printf("Scanning %d samples...\n", samples_per_channel);
     result = mcc172_a_in_scan_start(address, channels, samples_per_channel, options);
     if (result != RESULT_SUCCESS)
     {
@@ -206,7 +200,7 @@ int main(int argc, char* argv[])
     logfile = fopen(filename, "wt");
     for (index = 0; index < samples_read/num_channels; index++)
     {
-        for (channel = 0; channel < num_channels; channel++)
+        for (int channel = 0; channel < num_channels; channel++)
         {
             fprintf(logfile, "%f,", data[(index * num_channels) + channel]);
         }
