@@ -1,6 +1,6 @@
 # Tools for testing the MCC 172
 
-##To use this code:
+## To use this code:
 1. Install the daqhats library per instructions.
 2. Clone this repo with:
    
@@ -9,7 +9,7 @@
    git clone https://github.com/nwright-mcc/daqhats_testing.git
    ```
 
-##To acquire sample data to CSV:
+## To acquire sample data to CSV:
 1. Build the finite_scan code:
    ```sh
    cd ~/daqhats_testing/c/mcc172/finite_scan
@@ -17,7 +17,7 @@
    ```
 2. Run `./finite_scan -h` to get the list of options for using the program.
 
-##To acquire sample data directly in LabView:
+## To acquire sample data directly in LabView:
 1. Copy the VIs from ~/daqhats_testing/python/mcc172/labview to your LabView PC.
 2. Run the server application on the Raspberry Pi:
    ```sh
