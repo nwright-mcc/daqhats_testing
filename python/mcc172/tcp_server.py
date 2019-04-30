@@ -50,6 +50,7 @@ class ClientThread(Thread):
                     break
 
                 command = struct.unpack('B', data[0:1])
+                #print binascii.hexlify(data)
                 
                 # first byte is the command code
                 if command[0] == 0x00:
@@ -57,6 +58,7 @@ class ClientThread(Thread):
                         (channel, value) = struct.unpack_from('BB', data, 1)
                         print "IEPE power {0} {1}".format(channel, value)
                         self.hat.iepe_config_write(channel, value)
+                        self.conn.send(struct.pack('B', 1))
                 elif command[0] == 0x01:
                     if len(data) >= 10:
                         values = struct.unpack_from('>Bd', data, 1)
@@ -64,6 +66,13 @@ class ClientThread(Thread):
                         clock_frequency = values[1]
                         print "Config clock {0} {1:.1f}".format(clock_source, clock_frequency)
                         self.hat.a_in_clock_config_write(clock_source, clock_frequency)
+                        synced = False
+                        while not synced:
+                            time.sleep(0.01)
+                            result = self.hat.a_in_clock_config_read()
+                            synced = result.synchronized
+                        packed_data = struct.pack('>d', result.sample_rate_per_channel)
+                        self.conn.send(packed_data)
                 elif command[0] == 0x02:
                     if len(data) >= 6:
                         values = struct.unpack_from('>Bl', data, 1)
@@ -120,7 +129,11 @@ tcpsock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 tcpsock.setblocking(0)
 tcpsock.bind((TCP_IP, TCP_PORT))
 threads = []
- 
+
+p = subprocess.Popen(['hostname', '-I'], stdout=subprocess.PIPE)
+my_ip = p.communicate()[0]
+
+print "Server IP address is {}".format(my_ip)
 print "Waiting for incoming connections..."
 tcpsock.listen(4)
 while running:
