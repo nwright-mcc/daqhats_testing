@@ -12,22 +12,22 @@ from daqhats import mcc172, OptionFlags
 import binascii
 
 class ClientThread(Thread):
- 
+
     def __init__(self, conn, ip, port):
         Thread.__init__(self)
         self._stop_event = Event()
         self.ip = ip
         self.port = port
         self.conn = conn
-        self.hat = mcc172(3)
+        self.hat = mcc172(0)
         print "[+] New thread started for "+ip+":"+str(port)
- 
+
     def stop(self):
         self._stop_event.set()
-        
+
     def run(self):
         scanning = False
-        
+
         while not self._stop_event.is_set():
             try:
                 data = self.conn.recv(2048)
@@ -51,7 +51,7 @@ class ClientThread(Thread):
 
                 command = struct.unpack('B', data[0:1])
                 #print binascii.hexlify(data)
-                
+
                 # first byte is the command code
                 if command[0] == 0x00:
                     if len(data) >= 3:
@@ -75,15 +75,16 @@ class ClientThread(Thread):
                         self.conn.send(packed_data)
                 elif command[0] == 0x02:
                     if len(data) >= 6:
-                        values = struct.unpack_from('>Bl', data, 1)
+                        values = struct.unpack_from('>BlB', data, 1)
                         channel = values[0]
                         samples = values[1]
-                        print "Read data {0} {1}".format(channel, samples)
+                        options = values[2]
+                        print "Read data {0} {1} {2}".format(channel, samples, options)
                         if channel == 0:
                             channel_mask = 0x01
                         else:
                             channel_mask = 0x02
-                        self.hat.a_in_scan_start(channel_mask, samples, 0)
+                        self.hat.a_in_scan_start(channel_mask, samples, options)
                         samples_read = 0
                         scan_data = []
                         while (samples_read < samples):
@@ -93,9 +94,9 @@ class ClientThread(Thread):
                                 break
                             scan_data.extend(scan_tuple.data)
                             samples_read += len(scan_tuple.data)
-                        
+
                         self.hat.a_in_scan_stop()
-                        
+
                         flags = (int(scan_tuple.running) * 8 + 
                             int(scan_tuple.triggered) * 4 +
                             int(scan_tuple.buffer_overrun) * 2 +
@@ -106,24 +107,56 @@ class ClientThread(Thread):
                         else:
                             packed_data = struct.pack('Bl', flags, 0)
                         self.conn.send(packed_data)
-                        
+
                         self.hat.a_in_scan_cleanup()
-                        
+                elif command[0] == 0x03:
+                    if len(data) >= 5:
+                        values = struct.unpack_from('>lB', data, 1)
+                        samples = values[0]
+                        options = values[1]
+                        print "Read data both {0} {1}".format(samples, options)
+                        channel_mask = 0x03
+                        self.hat.a_in_scan_start(channel_mask, samples, options)
+                        samples_read = 0
+                        scan_data = []
+                        while (samples_read < 2*samples):
+                            time.sleep(0.1)
+                            scan_tuple = self.hat.a_in_scan_read(-1, 0)
+                            if scan_tuple.hardware_overrun or scan_tuple.buffer_overrun:
+                                break
+                            scan_data.extend(scan_tuple.data)
+                            samples_read += len(scan_tuple.data)
+
+                        self.hat.a_in_scan_stop()
+
+                        flags = (int(scan_tuple.running) * 8 + 
+                            int(scan_tuple.triggered) * 4 +
+                            int(scan_tuple.buffer_overrun) * 2 +
+                            int(scan_tuple.hardware_overrun))
+                        if len(scan_data) > 0:
+                            pack_string = '>Bl{}d'.format(len(scan_data))
+                            packed_data = struct.pack(pack_string, flags, len(scan_data), *scan_data)
+                        else:
+                            packed_data = struct.pack('Bl', flags, 0)
+                        self.conn.send(packed_data)
+
+                        self.hat.a_in_scan_cleanup()
+
         print("[-] Thread exit")
- 
+
 
 
 def signal_handler(sig, frame):
     global running
     running = False
-    
+
 running = True
 signal.signal(signal.SIGINT, signal_handler)
-    
+
 TCP_IP = '0.0.0.0'
 TCP_PORT = 62
 BUFFER_SIZE = 20  # Normally 1024, but we want fast response
- 
+
 tcpsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 tcpsock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 tcpsock.setblocking(0)
@@ -159,8 +192,8 @@ while running:
         threads.append(newthread)
         print "Waiting for incoming connections..."
         tcpsock.listen(4)
- 
+
 for t in threads:
     t.stop()
     t.join()
-    
+

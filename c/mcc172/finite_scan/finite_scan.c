@@ -9,45 +9,50 @@
 const char* default_filename = "./test.csv";
 
 
-int read_args(int argc, char **argv, uint8_t* address, 
-    double* sample_rate_per_channel, uint32_t* samples, char* filename) 
+int read_args(int argc, char **argv, uint8_t* address, uint8_t* iepe_on,
+    double* sample_rate_per_channel, uint32_t* samples, char* filename)
 {
-	int c;
+    int c;
 
-	opterr = 0;
+    opterr = 0;
 
-	while ((c = getopt(argc, argv, "ha:f:n:o:")) != -1) {
-		switch (c) {
-			case 'a':
-				*address = atoi(optarg);
-				break;
-            case 'f':
-                *sample_rate_per_channel = atof(optarg);
-                break;
-            case 'n':
-                *samples = strtoul(optarg, NULL, 10);
-                break;
-			case 'h':
-				return 1;
-				break;
-            case 'o':
-                strcpy(filename, optarg);
-                break;
-			case '?':
-				if ((optopt == 'a') || (optopt == 'f') ||
-                    (optopt == 'n') || (optopt == 'o'))
-					fprintf (stderr, "Option -%c requires an argument.\n", optopt);
-				else if (isprint (optopt))
-					fprintf (stderr, "Unknown option `-%c'.\n", optopt);
-				else
-					fprintf (stderr,  "Unknown option character `\\x%x'.\n", optopt);
-				return 1;
-			default:
-				abort ();
-		}
-	}
+    while ((c = getopt(argc, argv, "ha:f:n:o:i:")) != -1)
+    {
+        switch (c)
+        {
+        case 'a':
+            *address = atoi(optarg);
+            break;
+        case 'f':
+            *sample_rate_per_channel = atof(optarg);
+            break;
+        case 'n':
+            *samples = strtoul(optarg, NULL, 10);
+            break;
+        case 'i':
+            *iepe_on = atoi(optarg);
+            break;
+        case 'h':
+            return 1;
+            break;
+        case 'o':
+            strcpy(filename, optarg);
+            break;
+        case '?':
+            if ((optopt == 'a') || (optopt == 'f') || (optopt == 'i') ||
+                (optopt == 'n') || (optopt == 'o'))
+                fprintf (stderr, "Option -%c requires an argument.\n", optopt);
+            else if (isprint (optopt))
+                fprintf (stderr, "Unknown option `-%c'.\n", optopt);
+            else
+                fprintf (stderr,  "Unknown option character `\\x%x'.\n", optopt);
+            return 1;
+        default:
+            abort ();
+        }
+    }
 
-	return 0;
+    return 0;
 }
 
 int main(int argc, char* argv[])
@@ -67,28 +72,31 @@ int main(int argc, char* argv[])
     uint8_t clock_source;
     char filename[256];
     uint8_t synced;
+    uint8_t iepe_on;
 
     sample_rate_per_channel = 51200.0;
     samples_per_channel = 51200;
     address = 0;
+    iepe_on = 0;
     strcpy(filename, default_filename);
-    
-	if (read_args(argc, argv, &address, &sample_rate_per_channel,
-        &samples_per_channel, filename) != 0) 
+
+    if (read_args(argc, argv, &address, &iepe_on, &sample_rate_per_channel,
+        &samples_per_channel, filename) != 0)
     {
-		fprintf(stderr, 
-			"Usage: %s [-a address] [-f frequency] [-n samples] [-o file]\n"
-			"    -a address: address [0-7] of the HAT to scan (default is 0)\n"
+        fprintf(stderr,
+            "Usage: %s [-a address] [-f frequency] [-n samples] [-i iepe] [-o file]\n"
+            "    -a address: address [0-7] of the HAT to scan (default is 0)\n"
             "    -f frequency: ADC sampling frequency (default is 51200)\n"
             "    -n samples: number of samples (default is 51200)\n"
+            "    -i iepe: IEPE power off (0) or on (1) (default is off)\n"
             "    -o file: output file name (default is ./test.csv)\n",
             argv[0]);
-		return 1;
-	}
+        return 1;
+    }
 
     channels = 0x03;
     num_channels = 2;
-    options = 0;
+    options = OPTS_NOSCALEDATA | OPTS_NOCALIBRATEDATA;
 
     result = mcc172_open(address);
     if (result != RESULT_SUCCESS)
@@ -105,10 +113,10 @@ int main(int argc, char* argv[])
         mcc172_close(address);
         return 1;
     }
-    
+
     mcc172_close(address);
     return 0;
-#endif 
+#endif
 
     result = mcc172_a_in_scan_stop(address);
     if (result != RESULT_SUCCESS)
@@ -117,6 +125,28 @@ int main(int argc, char* argv[])
         mcc172_close(address);
         return 1;
     }
+
+    // configure IEPE
+    if (iepe_on != 0)
+    {
+        iepe_on = 1;
+    }
+
+    result = mcc172_iepe_config_write(address, 0, iepe_on);
+    if (result != RESULT_SUCCESS)
+    {
+        printf("iepe_config returned %d\n", result);
+        mcc172_close(address);
+        return 1;
+    }
+    result = mcc172_iepe_config_write(address, 1, iepe_on);
+    if (result != RESULT_SUCCESS)
+    {
+        printf("iepe_config returned %d\n", result);
+        mcc172_close(address);
+        return 1;
+    }
+    printf("IEPE power %s\n", iepe_on == 0 ? "off" : "on");
 
 #if 1
     // configure ADC clock
@@ -128,7 +158,7 @@ int main(int argc, char* argv[])
         mcc172_close(address);
         return 1;
     }
-    
+
     do
     {
         usleep(1000);
@@ -142,7 +172,7 @@ int main(int argc, char* argv[])
     } while (synced == 0);
     printf("ADC clock set to %.1f Hz\n", sample_rate_per_channel);
 #endif
-    
+
     printf("Scanning %d samples...\n", samples_per_channel);
     result = mcc172_a_in_scan_start(address, channels, samples_per_channel, options);
     if (result != RESULT_SUCCESS)
@@ -150,18 +180,18 @@ int main(int argc, char* argv[])
         printf("scan_start returned %d\n", result);
         mcc172_close(address);
         return 1;
-    }    
+    }
 
     int buffer_size_samples = samples_per_channel * num_channels;
     data = (double*)malloc(buffer_size_samples * sizeof(double));
     double* ptr = data;
     uint32_t samples_read = 0;
-    
+
     //printf("Read: 0\n");
     // wait for scan to complete
     do
     {
-        result = mcc172_a_in_scan_read(address, &status, -1, 0.0, ptr, 
+        result = mcc172_a_in_scan_read(address, &status, -1, 0.0, ptr,
             buffer_size_samples - samples_read, &samples_read_per_channel);
         samples_read += num_channels * samples_read_per_channel;
         ptr += samples_read_per_channel * num_channels;
@@ -169,9 +199,9 @@ int main(int argc, char* argv[])
         {
             //printf("Read: %d %X %d %d\n", result, status, samples_read_per_channel, samples_read);
         }
-        usleep(5000); 
+        usleep(5000);
     } while ((result == RESULT_SUCCESS) && ((status & STATUS_RUNNING) == STATUS_RUNNING));
-    
+
     if (result != RESULT_SUCCESS)
     {
         printf("\nscan_read returned %d\n", result);
@@ -180,7 +210,7 @@ int main(int argc, char* argv[])
     {
         printf("\nComplete\n");
     }
-    
+
     result = mcc172_a_in_scan_cleanup(address);
     if (result != RESULT_SUCCESS)
     {
@@ -190,7 +220,7 @@ int main(int argc, char* argv[])
         free(data);
         return 1;
     }
-    
+
     result = mcc172_close(address);
     if (result != RESULT_SUCCESS)
     {
@@ -206,7 +236,7 @@ int main(int argc, char* argv[])
         }
         fprintf(logfile, "\n");
     }
-    
+
     fclose(logfile);
     free(data);
     return 0;
