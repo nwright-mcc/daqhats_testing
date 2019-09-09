@@ -61,16 +61,18 @@ class ClientThread(Thread):
                         self.conn.send(struct.pack('B', 1))
                 elif command[0] == 0x01:
                     if len(data) >= 10:
-                        values = struct.unpack_from('>Bd', data, 1)
+                        values = struct.unpack_from('>BBd', data, 1)
                         clock_source = values[0]
-                        clock_frequency = values[1]
-                        print "Config clock {0} {1:.1f}".format(clock_source, clock_frequency)
-                        self.hat.a_in_clock_config_write(clock_source, clock_frequency)
+                        alias_mode = values[1]
+                        clock_frequency = values[2]
+                        print "Config clock {0} {1} {2:.1f}".format(clock_source, alias_mode, clock_frequency)
+                        self.hat.a_in_clock_config_write(clock_source, alias_mode, clock_frequency)
                         synced = False
                         while not synced:
                             time.sleep(0.01)
                             result = self.hat.a_in_clock_config_read()
                             synced = result.synchronized
+                        print "Set to {:.1f}".format(result.sample_rate_per_channel)
                         packed_data = struct.pack('>d', result.sample_rate_per_channel)
                         self.conn.send(packed_data)
                 elif command[0] == 0x02:
@@ -141,6 +143,8 @@ class ClientThread(Thread):
                         self.conn.send(packed_data)
 
                         self.hat.a_in_scan_cleanup()
+                else:
+                    print "Bad command {}".format(command[0])
 
         print("[-] Thread exit")
 
