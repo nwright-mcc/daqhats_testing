@@ -8,8 +8,9 @@ import time
 import subprocess
 from threading import Thread, Event
 from SocketServer import ThreadingMixIn
-from daqhats import mcc172, OptionFlags
+from daqhats import mcc172, mcc134, OptionFlags
 import binascii
+from sensor import SHT20
 
 class ClientThread(Thread):
 
@@ -20,6 +21,16 @@ class ClientThread(Thread):
         self.port = port
         self.conn = conn
         self.hat = mcc172(0)
+	try:
+            self.temp = mcc134(1)
+        except:
+            self.temp = None
+
+        try:
+            self.sht20 = SHT20(1, 0x40)
+        except:
+            self.sht20 = None
+
         print "[+] New thread started for "+ip+":"+str(port)
 
     def stop(self):
@@ -63,10 +74,9 @@ class ClientThread(Thread):
                     if len(data) >= 10:
                         values = struct.unpack_from('>BBd', data, 1)
                         clock_source = values[0]
-                        alias_mode = values[1]
                         clock_frequency = values[2]
-                        print "Config clock {0} {1} {2:.1f}".format(clock_source, alias_mode, clock_frequency)
-                        self.hat.a_in_clock_config_write(clock_source, alias_mode, clock_frequency)
+                        print "Config clock {0} {1:.1f}".format(clock_source, clock_frequency)
+                        self.hat.a_in_clock_config_write(clock_source, clock_frequency)
                         synced = False
                         while not synced:
                             time.sleep(0.01)
@@ -143,6 +153,24 @@ class ClientThread(Thread):
                         self.conn.send(packed_data)
 
                         self.hat.a_in_scan_cleanup()
+                elif command[0] == 0x04:
+                    # read temperature from 134
+                    if self.temp:
+                        value = self.temp.cjc_read(0)
+                        print "Read temperature {:.2f}".format(value)
+                    else:
+                        value = 25.0
+                    packed_data = struct.pack(">d", value)
+                    self.conn.send(packed_data)
+                elif command[0] == 0x05:
+                    # read temperature, RH from SHT20
+                    if self.sht20:
+                        h, t = self.sht20.all()
+                        print "Read temp & RH {0:.2f} {1:.1f}".format(h.RH, t.C)
+                        packed_data = struct.pack(">dd", h.RH, t.C)
+                    else:
+                        packed_data = struct.pack(">dd", 0, 25)
+                    self.conn.send(packed_data)
                 else:
                     print "Bad command {}".format(command[0])
 
