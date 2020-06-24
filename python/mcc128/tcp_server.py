@@ -185,8 +185,6 @@ class ClientThread(Thread):
                         with io.open(CAL_DIR + "/calibrate_128.txt", "w", encoding="utf8") as outfile:
                             outfile.write(unicode(hat_data))
 
-                        self.conn.send(struct.pack('B', 1))
-
                         # create the EEPROM file
                         process = Popen([CAL_DIR + "/make_128_eeprom.sh"], cwd=CAL_DIR)
                         (output, err) = process.communicate()
@@ -213,13 +211,12 @@ class ClientThread(Thread):
                                     print "daqhats_read_eeproms failed"
                                     self.conn.send(struct.pack('B', 0))
                                 else:
-                                    self.hat = None
-                                    self.hat = mcc128(ADDRESS)
                                     self.conn.send(struct.pack('B', 1))
 
                 else:
                     print "Bad command {}".format(command[0])
 
+	self.hat = None
         print("[-] Thread exit")
 
 
